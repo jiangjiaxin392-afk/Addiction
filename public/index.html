@@ -1,25 +1,51 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Addiction — AI Injection</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
-  </head>
-  <body>
-    <div id="ui">
-      <div id="question"></div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Addiction</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+</head>
+<body>
+  <!-- Cover overlay (clickable) -->
+  <div id="cover" aria-hidden="false">
+    <div id="cover-card">
+      <div id="cover-title">AI Addiction Test</div>
 
-      <div id="buttons">
-        <button id="btn-think">Think Myself</button>
-        <button id="btn-ai">Ask AI</button>
-        <button id="btn-restart" class="ghost" style="display:none;">Restart</button>
+      <div id="cover-desc">
+        You’ll see short real-world tasks. Each round, choose <b>Think Myself</b> or <b>Ask AI</b>.
+        Your final “addiction rate” is based on how often you relied on AI.
       </div>
 
-      <div id="meta"></div>
-    </div>
+      <!-- ✅ NEW: public summary box -->
+      <div id="cover-stats" aria-live="polite">
+        <div class="cover-stats-row">
+          <div class="cover-stats-label">Most common reliance band</div>
+          <div class="cover-stats-value" id="cover-most">—</div>
+        </div>
+        <div class="cover-stats-row">
+          <div class="cover-stats-label">Total plays recorded</div>
+          <div class="cover-stats-value" id="cover-total">—</div>
+        </div>
+        <div class="cover-stats-hint" id="cover-hint">Updating with new public runs.</div>
+      </div>
 
-    <script src="sketch.js"></script>
-  </body>
+      <button id="btn-start">Start</button>
+    </div>
+  </div>
+
+  <!-- HUD for quiz (hidden until Start) -->
+  <div id="hud" aria-hidden="true">
+    <div id="question">Loading…</div>
+    <div id="meta"></div>
+    <div id="controls">
+      <button id="btn-think">Think Myself</button>
+      <button id="btn-ai">Ask AI</button>
+      <button id="btn-restart">Restart</button>
+    </div>
+  </div>
+
+  <script src="sketch.js"></script>
+</body>
 </html>

@@ -1,68 +1,164 @@
+/* style.css (FULL) */
 html, body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
   background: #000;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 canvas {
   display: block;
-  width: 100vw;
-  height: 100vh;
+  position: fixed;
+  inset: 0;
+  z-index: 0; /* background */
 }
 
-#ui {
+/* ========= COVER ========= */
+#cover {
   position: fixed;
-  left: 36px;
-  bottom: 36px;
-  width: min(780px, calc(100vw - 72px));
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto; /* IMPORTANT: allow clicking */
+}
+
+#cover-card {
+  width: min(720px, calc(100vw - 48px));
+  padding: 22px 22px 18px;
+  background: rgba(0,0,0,0.62);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 50px rgba(0,0,0,0.45);
+}
+
+#cover-title {
+  font-size: 34px;
+  line-height: 1.1;
   color: #fff;
+  margin-bottom: 10px;
+}
+
+#cover-desc {
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 14px;
+}
+
+#btn-start {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  pointer-events: auto;
+}
+#btn-start:hover { border-color: rgba(255,255,255,0.34); }
+
+/* ===== Cover stats box (NEW) =====
+   index.html里你自己加了的话，这里负责样式
+*/
+#cover-stats {
+  margin: 10px 0 14px;
+  padding: 14px 14px 12px;
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.cover-stats-row{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 6px 2px;
+}
+
+.cover-stats-label{
+  font-size: 12px;
+  color: rgba(255,255,255,0.78);
+}
+
+.cover-stats-value{
+  font-size: 14px;
+  color: rgba(255,255,255,0.95);
+  font-weight: 600;
+}
+
+.cover-stats-hint{
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+}
+
+/* ========= HUD safe zone ========= */
+#hud {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 14px;
   z-index: 10;
-  user-select: none;
+  pointer-events: none;
+  color: white;
+
+  height: min(18vh, 170px);
+  display: none; /* hidden until Start */
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 #question {
-  font-size: 22px;
-  line-height: 1.35;
-  background: rgba(0,0,0,0.72);
-  border: 1px solid rgba(255,255,255,0.15);
+  pointer-events: none;
+  font-size: 28px;
+  line-height: 1.18;
+
+  padding: 12px 16px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 14px;
-  padding: 16px 18px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  max-height: 100%;
 }
 
-#buttons {
-  margin-top: 12px;
+#meta {
+  pointer-events: none;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+#controls {
+  margin-top: 6px;
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
+  pointer-events: auto;
 }
 
 button {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.20);
-  background: rgba(0,0,0,0.85);
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.55);
   color: #fff;
+  padding: 10px 14px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 14px;
 }
 
-button:hover { transform: translateY(-1px); }
-
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-  transform: none;
 }
 
-button.ghost {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.14);
-}
-
-#meta {
-  margin-top: 10px;
-  font-size: 13px;
-  opacity: 0.8;
-}
+#btn-restart { display: none; }
