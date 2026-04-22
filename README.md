@@ -52,6 +52,11 @@ No personal text, no prompts, no identifiers are stored.
 1) Install
 ```bash
 npm install
+```
+2) Create
 OPENAI_API_KEY=your_key_here
 PORT=3000
+3) Start
+```bash
 node app.js
+```
