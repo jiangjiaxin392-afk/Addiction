@@ -26,27 +26,27 @@ const client =
    ----------------------------- */
 const FALLBACK = {
   study_writing: [
-    "After rereading a class paragraph, the wording feels repetitive and the main claim is easy to miss. Rewrite it so the point is clearer, without adding new facts.",
-    "A short reflection draft sounds stiff and over-formal. Polish it into an academic tone that still reads naturally, keeping the meaning unchanged."
+    "A class paragraph keeps circling the same idea, so the main claim gets lost. Rewrite it so the point is obvious, without adding new facts.",
+    "A short reflection draft sounds stiff and over-formal. Polish it into a calmer academic tone that still reads naturally, keeping the meaning unchanged."
   ],
   study_summary: [
-    "Lecture notes are scattered across headings, half-sentences, and arrows. Restructure them into a clean summary that is easy to review.",
-    "A dense article paragraph buries the key idea under definitions and examples. Summarise it in plain English while preserving the central point."
+    "Lecture notes are scattered across half-sentences, arrows, and side comments. Restructure them into a clean summary that is easy to review.",
+    "A dense paragraph hides the key idea under definitions and examples. Summarise it in plain English while keeping the central point."
   ],
   online_life: [
-    "A comment you typed could easily be read as sarcastic, even if you didn’t mean it that way. Rewrite it to keep the point but reduce the chance of misreading.",
-    "A short post draft feels unclear and slightly awkward. Rewrite it so it sounds human, readable, and easy to understand."
+    "A comment you typed could easily be read as sarcastic even if you didn’t mean it. Rewrite it to keep the point but reduce the chance of misreading.",
+    "A short post draft feels unclear and slightly awkward. Rewrite it so it sounds human, readable, and easy to follow."
   ],
   common_sense: [
-    "A friend shares a neat-sounding claim that feels too convenient to trust. Rewrite a reply that checks assumptions and asks good questions without sounding smug.",
-    "Someone asks for a simple explanation of a concept they keep mixing up. Rewrite your explanation so it stays accurate but feels easy to follow."
+    "A friend shares a neat-sounding claim that feels too convenient to trust. Write a reply that checks assumptions and asks good questions without sounding smug.",
+    "Someone keeps mixing up a simple concept and gets frustrated. Rewrite your explanation so it stays accurate but feels easy to grasp."
   ],
   daily_life: [
     "A small recurring issue at home keeps coming back, but you don’t want to start an argument. Rewrite a message that is calm, clear, and cooperative.",
     "A week plan exists in fragments—sticky notes, screenshots, and half-finished lists. Turn it into a simple plan that is easy to follow."
   ],
   travel_planning: [
-    "Plans are scattered across chat messages and screenshots, and nobody agrees on what matters most. Turn the notes into a flexible itinerary with a sensible flow.",
+    "Plans are scattered across chat messages and screenshots, and people disagree on priorities. Turn the notes into a flexible itinerary with a sensible flow.",
     "A day plan in a new city keeps growing into too many stops. Propose a route that stays flexible and doesn’t feel rushed."
   ],
   decision_tradeoff: [
@@ -63,7 +63,7 @@ const FALLBACK = {
   ],
   communication: [
     "In a group chat, your tone was misread and the thread is getting tense. Rewrite a reply that is friendly, precise, and de-escalating.",
-    "A clarification request needs to be asked in a busy channel without sounding demanding. Rewrite the message to be specific and polite."
+    "A clarification request needs to be posted in a busy channel without sounding demanding. Rewrite the message to be specific and polite."
   ]
 };
 
@@ -207,6 +207,8 @@ function tooSimilar(candidate, list, thresh = 0.46) {
 /* -----------------------------
    Prompt hygiene (keep output “complete”)
    ----------------------------- */
+const ENDING_LINE = "If it were you, would you Ask AI or think it through yourself?";
+
 function sanitizePrompt(text) {
   let t = String(text || "").trim();
   t = t.replace(/^["'“”]+|["'“”]+$/g, "").trim();
@@ -227,39 +229,52 @@ function looksIncomplete(t) {
   return false;
 }
 
+// Make sure every prompt ends with the same closing question.
+function ensureEnding(text) {
+  let s = sanitizePrompt(text);
+  if (!s) return s;
+
+  // If it already ends with the intended question, keep it.
+  const tail = s.slice(-ENDING_LINE.length).toLowerCase();
+  if (tail === ENDING_LINE.toLowerCase()) return s;
+
+  // Remove other “choice questions” if the model wrote them.
+  s = s
+    .replace(/\s*(Do you|Would you|Will you)\s+(want to|prefer to|rather|choose).*[?]\s*$/i, "")
+    .replace(/\s*(Would you)\s+(ask ai|use ai|use an ai assistant).*[?]\s*$/i, "")
+    .trim();
+
+  // Ensure punctuation before appending.
+  if (s && !/[.!?]$/.test(s)) s += ".";
+
+  return `${s} ${ENDING_LINE}`;
+}
+
 /* -----------------------------
    Prompt generation (OpenAI)
    ----------------------------- */
 const THEME_GUIDE = {
   daily_life:
-    "Ordinary daily situation. Artifact: text message, short note, small plan. Keep it grounded (home/campus/friends).",
+    "Daily life. Keep it grounded: home, campus, friends. Artifact can be a message, a note, a small plan.",
   study_writing:
-    "Study writing polish. Artifact: paragraph/reflection/short statement. Keep meaning; improve clarity; avoid new claims.",
+    "Study writing. Artifact: a short paragraph, reflection, or claim. Improve clarity without adding new facts.",
   study_summary:
-    "Study summarising/structuring. Artifact: notes/dense paragraph. Goal: readability and a clear structure.",
+    "Study summarising/structuring. Artifact: notes or a dense paragraph. Make it easier to review.",
   online_life:
-    "Online life and tone. Artifact: comment, post draft, DM, reply. Focus on clarity and misinterpretation risk.",
+    "Online tone. Artifact: comment, post draft, DM, reply. Focus on clarity and misinterpretation risk.",
   common_sense:
-    "Common sense / media literacy. Artifact: claim, explanation, short argument. Focus on checking assumptions and clarity.",
+    "Common sense / media literacy. Artifact: a claim or explanation. Check assumptions; keep it accessible.",
   code_debug:
-    "Debug/performance. Artifact: code + symptom. Prefer a minimal first fix and a brief reason.",
+    "Debug/performance. Artifact: code + symptom. Suggest a minimal first test and why.",
   creative_design:
-    "Design/poster/visual communication. Artifact: layout description. Focus on hierarchy, scanability, and focus.",
+    "Design/poster/visual communication. Artifact: layout description. Improve hierarchy and readability.",
   travel_planning:
     "Travel planning (only once per run). Artifact: scattered notes. Keep it flexible; avoid prices and strict schedules.",
   decision_tradeoff:
-    "Decision framing. Artifact: two options. Focus on priorities and trade-offs, not time/budget.",
+    "Decision framing. Artifact: two options. Clarify priorities and trade-offs, not time/budget.",
   communication:
-    "Communication in social/work contexts. Artifact: chat message, reply, short announcement. Avoid making every case an email."
+    "Communication. Artifact: chat message, reply, short update. Avoid making every case an email."
 };
-
-const VIBE_SEEDS = [
-  "Let the wording breathe; make it sound like a real moment.",
-  "Vary the sentence rhythm; avoid a repeated template.",
-  "Make it specific enough to picture, but not melodramatic.",
-  "Keep the tone human and slightly imperfect, like real drafting.",
-  "Make the task clear without turning it into an instruction sheet."
-];
 
 const SCENE_SEEDS = {
   daily_life: [
@@ -337,7 +352,7 @@ const SCENE_SEEDS = {
 const TRAVEL_RE = /\b(trip|travel|itinerary|flight|airport|hotel|hostel|visa|booking|train ticket|boarding pass|city break)\b/i;
 const MONEY_RE = /\b(budget|price|cost|expensive|cheap|afford|dollars|usd|eur|euro|pounds|gbp|yen|rmb|cny)\b|[$€£¥]/i;
 
-// "You/You're" template avoidance (server-side guard)
+// Avoid over-template openings. Not banned, just discouraged.
 const YOU_START_RE = /^\s*(you|you’re|you're|you have|you need)\b/i;
 
 function mentionsTravel(text) {
@@ -354,56 +369,54 @@ function startsTooTemplate(text) {
 
 function lengthDirective(lenKind) {
   if (lenKind === "short") {
-    return "Length target: 1–2 sentences, but still concrete (situation + artifact + exact task). Do not write a vague abstract prompt.";
+    return "Length: 1–2 sentences. Still include a clear situation, the artifact, and the exact task.";
   }
-  return "Length target: 3–4 sentences, with natural detail and a clear task.";
+  return "Length: 3–4 sentences. Keep it easy to read, with a clear task.";
 }
 
 async function generateScenarioPrompt({ theme, avoidText, lenKind }) {
   const system = [
-    "You generate ONE English scenario-based task prompt for a public interactive artwork.",
-    "The user must choose: do it themselves vs ask an AI assistant.",
+    "Write ONE English scenario prompt for a public interactive artwork.",
+    "It should feel like a real situation with a clear task.",
     "",
-    "Requirements:",
-    "- Specific, concrete situation. Mention the artifact (message/comment/notes/draft/code/slide text/itinerary).",
-    "- The task must be unambiguous (rewrite/plan/clarify/structure/compare/debug/etc.).",
-    "- Include a constraint, but keep it natural and lightweight (tone/clarity/faithfulness/readability).",
-    "- Avoid money/price/budget constraints.",
+    "Hard rules:",
+    "- Keep the language simple and readable (no academic jargon unless the theme is study writing).",
+    "- Include a concrete situation + a specific artifact (message, notes, paragraph, comment, code, plan).",
+    "- Make the task unambiguous (rewrite / summarise / clarify / plan / compare / debug / redesign).",
+    "- Avoid money/price/budget.",
     "- Avoid strict time limits and countdowns.",
-    "- No lists, no bullet points, no numbering, no quotes.",
-    "- Do NOT mention 'Round' or 'AskAI'.",
-    "- Must end with proper punctuation; never use ellipses.",
+    "- No lists, no bullet points, no numbering, no quotes, no ellipses.",
     "",
-    "Style (important):",
-    "- Do NOT keep starting with 'You' or 'You’re'. Use varied openings such as 'A friend...', 'After class...', 'In a group chat...', 'Someone...', 'A draft...'.",
+    "Style:",
+    "- Do not always start with 'You' or 'You’re'. Vary openings naturally.",
     "- Vary sentence rhythm; avoid a repeated template.",
     "",
-    "Return ONLY the prompt text."
+    `Important ending rule: end with exactly this final sentence: "${ENDING_LINE}"`,
+    "",
+    "Return only the prompt text."
   ].join("\n");
 
-  const vibe = VIBE_SEEDS[(Math.random() * VIBE_SEEDS.length) | 0];
   const pool = SCENE_SEEDS[theme] || ["a realistic situation with a clear artifact"];
   const scene = pool[(Math.random() * pool.length) | 0];
 
   const user = [
     `Theme: ${theme}`,
     THEME_GUIDE[theme] || "Practical scenario task.",
-    `Scenario seed: ${scene}`,
+    `Scene seed: ${scene}`,
     lengthDirective(lenKind),
-    vibe,
     avoidText ? `Avoid similar topics/phrasing to:\n${avoidText}` : ""
   ].filter(Boolean).join("\n\n");
 
   const r = await client.chat.completions.create({
     model: "gpt-4o-mini",
-    temperature: 1.18,
+    temperature: 1.15,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user }
     ]
   });
 
-  return sanitizePrompt(r.choices?.[0]?.message?.content || "");
+  return ensureEnding(r.choices?.[0]?.message?.content || "");
 }
 
 /* -----------------------------
@@ -422,9 +435,10 @@ app.get("/api/question", async (req, res) => {
     .concat(sess.prompts.slice(-22))
     .concat(avoid ? [avoid] : []);
 
+  // Offline path
   if (!client) {
     const pool = FALLBACK[theme] || FALLBACK.daily_life;
-    const q = pick(pool);
+    const q = ensureEnding(pick(pool));
     sess.prompts.push(q);
     return res.json({
       question: q,
@@ -439,12 +453,13 @@ app.get("/api/question", async (req, res) => {
     const maxTries = 34;
 
     for (let i = 0; i < maxTries; i++) {
-      const candidate = await generateScenarioPrompt({
+      const candidateRaw = await generateScenarioPrompt({
         theme,
         lenKind,
         avoidText: avoidList.join("\n---\n")
       });
 
+      const candidate = ensureEnding(candidateRaw);
       if (!candidate) continue;
       if (looksIncomplete(candidate)) continue;
 
@@ -454,8 +469,8 @@ app.get("/api/question", async (req, res) => {
       // Avoid money language almost entirely.
       if (mentionsMoney(candidate)) continue;
 
-      // Avoid repetitive "You're..." openings (stronger in early tries).
-      if (i < 24 && startsTooTemplate(candidate)) continue;
+      // Stronger avoidance early on; later we relax a bit.
+      if (i < 18 && startsTooTemplate(candidate)) continue;
 
       if (tooSimilar(candidate, avoidList, 0.46)) continue;
 
@@ -465,7 +480,7 @@ app.get("/api/question", async (req, res) => {
 
     if (!best) {
       const pool = FALLBACK[theme] || FALLBACK.daily_life;
-      best = pick(pool);
+      best = ensureEnding(pick(pool));
       sess.prompts.push(best);
       return res.json({
         question: best,
@@ -486,7 +501,7 @@ app.get("/api/question", async (req, res) => {
     });
   } catch (e) {
     const pool = FALLBACK[theme] || FALLBACK.daily_life;
-    const q = pick(pool);
+    const q = ensureEnding(pick(pool));
     sess.prompts.push(q);
     res.json({
       question: q,
