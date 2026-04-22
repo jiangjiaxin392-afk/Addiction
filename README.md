@@ -1,10 +1,10 @@
-Addiction — AI Reliance Test (Interactive Web Artwork)
+# Addiction — AI Reliance Test (Interactive Web Artwork)
+
 **Author:** Aaron Jiang  
 **Project:** Addiction  
 
 Addiction is a small interactive web artwork that probes how “efficiency” can slowly turn thinking into something people avoid.  
-Instead of treating AI reliance as simple fascination, the project frames dependency as a habit built through repeated cognitive outsourcing: when uncertainty and effort are delegated to computational systems, the user may shift from active thinking to result-checking.  
-
+Instead of treating AI reliance as simple fascination, the project frames dependency as a habit built through repeated cognitive outsourcing: when uncertainty and effort are delegated to computational systems, the user may shift from active thinking to result-checking.
 ---
 
 ## What you do
