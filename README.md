@@ -26,17 +26,19 @@ No personal text, no prompts, no identifiers are stored.
 ## Screenshots / Media (replace these)
 > Put your images in a folder like `/public/assets/` or `/docs/`, then replace the paths below.
 
-**Cover screen**
-![Cover](./docs/cover.png)  <!-- TODO: replace -->
+## Screenshots
 
-**Quiz / brain interaction**
-![Quiz](./docs/quiz.png)  <!-- TODO: replace -->
+**Cover screen**
+![Cover](./docs/cover.png)
+
+**Test 01**
+![Test 01](./docs/test-01.png)
+
+**Test 02**
+![Test 02](./docs/test-02.png)
 
 **Result + public distribution**
-![Result](./docs/result.png)  <!-- TODO: replace -->
-
-**Optional: short demo video**
-- Demo: ./docs/demo.mp4  <!-- TODO: add -->
+![Result](./docs/result.png)
 
 ---
 
