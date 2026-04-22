@@ -1,4 +1,4 @@
-# Addiction — AI Reliance Test (Interactive Web Artwork)
+# Addiction — AI Reliance Test
 
 **Author:** Aaron Jiang  
 **Project:** Addiction  
