@@ -23,8 +23,6 @@ No personal text, no prompts, no identifiers are stored.
 
 ---
 
-## Screenshots / Media (replace these)
-> Put your images in a folder like `/public/assets/` or `/docs/`, then replace the paths below.
 
 ## Screenshots
 
