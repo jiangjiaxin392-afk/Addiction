@@ -1,5 +1,7 @@
 # Addiction — AI Reliance Test
 
+**Live demo:** https://addiction-mz12.onrender.com
+
 **Author:** Aaron Jiang  
 **Project:** Addiction  
 
