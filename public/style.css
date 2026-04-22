@@ -1,4 +1,6 @@
-/* style.css (FULL) */
+/* Addiction — UI styling
+   Minimal monochrome style to match the sketch aesthetic. */
+
 html, body {
   margin: 0;
   padding: 0;
@@ -11,10 +13,12 @@ canvas {
   display: block;
   position: fixed;
   inset: 0;
-  z-index: 0; /* background */
+  z-index: 0; /* background layer */
 }
 
-/* ========= COVER ========= */
+/* =========================
+   COVER
+   ========================= */
 #cover {
   position: fixed;
   inset: 0;
@@ -22,7 +26,7 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: auto; /* IMPORTANT: allow clicking */
+  pointer-events: auto; /* allows clicking Start */
 }
 
 #cover-card {
@@ -49,6 +53,41 @@ canvas {
   margin-bottom: 14px;
 }
 
+/* Public summary box (optional; uses your IDs) */
+#cover-stats {
+  margin: 10px 0 14px;
+  padding: 14px 14px 12px;
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.cover-stats-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 6px 2px;
+}
+
+.cover-stats-label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.78);
+}
+
+.cover-stats-value {
+  font-size: 14px;
+  color: rgba(255,255,255,0.95);
+  font-weight: 600;
+}
+
+.cover-stats-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+}
+
 #btn-start {
   width: 100%;
   border: 1px solid rgba(255,255,255,0.18);
@@ -60,56 +99,24 @@ canvas {
   font-size: 14px;
   pointer-events: auto;
 }
-#btn-start:hover { border-color: rgba(255,255,255,0.34); }
-
-/* ===== Cover stats box (NEW) =====
-   index.html里你自己加了的话，这里负责样式
-*/
-#cover-stats {
-  margin: 10px 0 14px;
-  padding: 14px 14px 12px;
-  background: rgba(0,0,0,0.38);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 14px;
-  backdrop-filter: blur(8px);
+#btn-start:hover {
+  border-color: rgba(255,255,255,0.34);
 }
 
-.cover-stats-row{
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 6px 2px;
-}
-
-.cover-stats-label{
-  font-size: 12px;
-  color: rgba(255,255,255,0.78);
-}
-
-.cover-stats-value{
-  font-size: 14px;
-  color: rgba(255,255,255,0.95);
-  font-weight: 600;
-}
-
-.cover-stats-hint{
-  margin-top: 6px;
-  font-size: 11px;
-  color: rgba(255,255,255,0.55);
-}
-
-/* ========= HUD safe zone ========= */
+/* =========================
+   HUD (quiz)
+   ========================= */
 #hud {
   position: absolute;
   left: 24px;
   right: 24px;
   bottom: 14px;
   z-index: 10;
-  pointer-events: none;
-  color: white;
 
-  height: min(18vh, 170px);
+  pointer-events: none; /* only buttons should be clickable */
+  color: #fff;
+
+  height: min(18vh, 170px); /* safe-zone cap */
   display: none; /* hidden until Start */
   flex-direction: column;
   justify-content: flex-end;
@@ -118,7 +125,8 @@ canvas {
 
 #question {
   pointer-events: none;
-  font-size: 28px;
+
+  font-size: 28px; /* JS may scale this down */
   line-height: 1.18;
 
   padding: 12px 16px;
@@ -143,7 +151,7 @@ canvas {
   margin-top: 6px;
   display: flex;
   gap: 10px;
-  pointer-events: auto;
+  pointer-events: auto; /* buttons clickable */
 }
 
 button {
@@ -161,4 +169,6 @@ button:disabled {
   cursor: not-allowed;
 }
 
-#btn-restart { display: none; }
+#btn-restart {
+  display: none; /* shown at the end */
+}

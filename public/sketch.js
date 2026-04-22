@@ -1,24 +1,51 @@
-// sketch.js (FULL) — cover + quiz + public histogram (no file rename)
+/**
+ * Aaron Jiang — Addiction
+ * Project (short): A small interactive test where users face everyday tasks and decide whether
+ * to think independently or rely on AI. The visual “brain” changes with each AI choice, and
+ * the final score is aggregated anonymously into a public distribution.
+ */
 
-const totalRounds = 10;
+const TOTAL_ROUNDS = 10;
 
+// ---------- Runtime state ----------
+let mode = "cover"; // "cover" | "quiz" | "done"
 let round = 0;
 let askCount = 0;
+
 let shakeAmp = 0;
 let shakePulse = 0;
 let vapor = 0;
 
-let questionText = "Loading...";
-let uiQuestion, uiMeta, btnThink, btnAI, btnRestart;
-
-let brain;
-let liquid;
 let finished = false;
+let questionText = "Loading…";
 
+// Stable per page load (helps server-side anti-repeat)
+const SESSION_ID = (Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 18);
+
+// Client-side anti-repeat
+const recentQuestions = [];
+const RECENT_Q_MAX = 18;
+
+// Only used if the question API fails
+const FALLBACK_PROMPTS = [
+  "Rewrite this message to sound calm and clear, without changing the key facts.",
+  "Turn these messy notes into a clean structure you can review later.",
+  "Polish this paragraph so it reads academic but still natural, without adding new claims.",
+  "Suggest a clearer poster layout so the hierarchy is easy to scan.",
+  "Debug a small p5.js performance issue and propose a minimal first fix."
+];
+
+function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
+
+// ---------- DOM ----------
+let elCover, elHud;
+let elQuestion, elMeta;
+let btnStart, btnThink, btnAI, btnRestart;
+
+// ---------- Word net ----------
 let wordPool = [];
 let netWords = [];
-
-let net = {
+const net = {
   cols: 32,
   rows: 18,
   marginX: 28,
@@ -33,41 +60,21 @@ let netLayer;
 let netDirty = true;
 let netTick = 0;
 
-let liquidLayer;
+// ---------- Brain visuals (lazy init) ----------
+let brain = null;
+let liquid = null;
+let liquidLayer = null;
 
-// anti-repeat (front-end side)
-let recentQuestions = [];
-const RECENT_Q_MAX = 18;
+// ---------- Public stats ----------
+let publicStats = null; // { total, buckets[] }
 
-// stable per page load
-const SESSION_ID = (Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 18);
+// ---------- Request gating ----------
+let reqSeq = 0;
+let inFlight = false;
 
-// Only used if API fails
-const FALLBACK_PROMPTS = [
-  "You’ve written a Chinese abstract for your project. Translate it into English (150–180 words) and polish the tone to sound academic but natural.",
-  "Your tutor says this paragraph is vague. Rewrite it to be more specific, add 1 concrete example, and keep it under 120 words.",
-  "You need to email a professor about a deadline extension. Rewrite it to sound polite and confident (under 110 words), keeping the key facts unchanged.",
-  "You have messy lecture notes. Turn them into a clean outline with 3 headings and 6 bullet points you can paste into slides.",
-  "Your poster layout feels empty. Suggest 6 composition/hierarchy changes to make it richer without clutter, and justify the top 2 choices in one sentence each.",
-  "A p5.js sketch stutters on your laptop. Identify 3 likely causes and propose one minimal fix to try first, with a short explanation."
-];
-
-function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
-
-function isTooSimilar(q) {
-  const a = q.toLowerCase();
-  for (const old of recentQuestions) {
-    const b = old.toLowerCase();
-    const aWords = new Set(a.split(/\W+/).filter(w => w.length >= 5));
-    const bWords = new Set(b.split(/\W+/).filter(w => w.length >= 5));
-    if (aWords.size === 0 || bWords.size === 0) continue;
-    let inter = 0;
-    for (const w of aWords) if (bWords.has(w)) inter++;
-    const overlap = inter / Math.max(1, Math.min(aWords.size, bWords.size));
-    if (overlap > 0.55) return true;
-  }
-  return false;
-}
+// ============================================================
+// Small text helpers
+// ============================================================
 
 function sanitizePrompt(q) {
   if (!q) return "";
@@ -79,111 +86,80 @@ function sanitizePrompt(q) {
   return s;
 }
 
-/* =========================
-   STATE: cover / quiz / done
-   ========================= */
-let MODE = "cover"; // "cover" | "quiz" | "done"
+function isTooSimilar(q) {
+  const a = q.toLowerCase();
+  for (const old of recentQuestions) {
+    const b = old.toLowerCase();
+    const aWords = new Set(a.split(/\W+/).filter(w => w.length >= 5));
+    const bWords = new Set(b.split(/\W+/).filter(w => w.length >= 5));
+    if (!aWords.size || !bWords.size) continue;
 
-/* =========================
-   HUD SAFE ZONE + AUTO FIT
-   ========================= */
+    let inter = 0;
+    for (const w of aWords) if (bWords.has(w)) inter++;
+    const overlap = inter / Math.max(1, Math.min(aWords.size, bWords.size));
+    if (overlap > 0.55) return true;
+  }
+  return false;
+}
+
+// ============================================================
+// HUD safe zone + auto-fit
+// ============================================================
+
 function applyHudSafeZone() {
-  const hud = document.getElementById("hud");
-  if (!hud || !uiQuestion) return;
+  if (!elHud || !elQuestion) return;
 
   const safeH = Math.min(Math.floor(window.innerHeight * 0.18), 180);
-  const sidePad = 24;
-  const bottomPad = 14;
+  elHud.style.height = safeH + "px";
 
-  hud.style.position = "absolute";
-  hud.style.left = sidePad + "px";
-  hud.style.right = sidePad + "px";
-  hud.style.bottom = bottomPad + "px";
-  hud.style.height = safeH + "px";
-  hud.style.pointerEvents = "none";
-  hud.style.display = "flex";
-  hud.style.flexDirection = "column";
-  hud.style.justifyContent = "flex-end";
-  hud.style.gap = "10px";
-  hud.style.color = "#fff";
-
-  uiQuestion.style.whiteSpace = "pre-wrap";
-  uiQuestion.style.wordBreak = "break-word";
-  uiQuestion.style.overflow = "hidden";
-  uiQuestion.style.maxHeight = "100%";
-
-  const metaH = uiMeta ? Math.ceil(uiMeta.getBoundingClientRect().height) : 0;
   const controls = document.getElementById("controls");
+  const metaH = elMeta ? Math.ceil(elMeta.getBoundingClientRect().height) : 0;
   const controlsH = controls ? Math.ceil(controls.getBoundingClientRect().height) : 0;
   const reserve = metaH + controlsH + 16;
 
   const qMax = Math.max(72, safeH - reserve);
-  uiQuestion.style.maxHeight = qMax + "px";
+  elQuestion.style.maxHeight = qMax + "px";
 }
 
 function fitQuestionFont() {
-  if (!uiQuestion) return;
+  if (!elQuestion) return;
   applyHudSafeZone();
 
-  const el = uiQuestion;
   const MAX_PX = 30;
   const MIN_PX = 15;
 
+  elQuestion.style.lineHeight = "1.18";
   let size = MAX_PX;
-  el.style.fontSize = size + "px";
-  el.style.lineHeight = "1.18";
+  elQuestion.style.fontSize = size + "px";
 
   for (let i = 0; i < 40; i++) {
-    if (el.scrollHeight <= el.clientHeight + 1) break;
+    if (elQuestion.scrollHeight <= elQuestion.clientHeight + 1) break;
     size -= 1;
-    if (size <= MIN_PX) { size = MIN_PX; el.style.fontSize = size + "px"; break; }
-    el.style.fontSize = size + "px";
+    if (size <= MIN_PX) { size = MIN_PX; break; }
+    elQuestion.style.fontSize = size + "px";
   }
+  elQuestion.style.fontSize = size + "px";
 }
 
-/* Prevent double/overlapping async nextRound calls */
-let _reqSeq = 0;
-let _inFlight = false;
+// ============================================================
+// Cover stats box (uses your IDs from index.html)
+// ============================================================
 
-/* =========================
-   PUBLIC STATS (Histogram)
-   ========================= */
-let publicStats = null; // { total, buckets[] }
-
-async function submitResultAndFetchStats() {
-  const pct = Math.round((askCount / totalRounds) * 100);
-
-  try {
-    await fetch("/api/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rate: pct })
-    });
-  } catch {}
-
-  try {
-    const r = await fetch("/api/stats", { cache: "no-store" });
-    publicStats = await r.json();
-  } catch {
-    publicStats = null;
-  }
-}
-
-/* =========================
-   COVER STATS BOX (NEW)
-   ========================= */
 function formatBandLabel(i) {
   const lo = i * 10;
   const hi = (i === 9) ? 100 : (i * 10 + 9);
   return `${lo}–${hi}%`;
 }
 
-async function updateCoverStats() {
+async function fetchStats() {
+  const r = await fetch("/api/stats", { cache: "no-store" });
+  return await r.json();
+}
+
+async function updateCoverStatsBox() {
   const elMost = document.getElementById("cover-most");
   const elTotal = document.getElementById("cover-total");
   const elHint = document.getElementById("cover-hint");
-
-  // 如果你 index.html 还没加这些 id，也不会报错
   if (!elMost && !elTotal && !elHint) return;
 
   if (elMost) elMost.textContent = "Loading…";
@@ -191,9 +167,7 @@ async function updateCoverStats() {
   if (elHint) elHint.textContent = "Pulling the latest public summary…";
 
   try {
-    const r = await fetch("/api/stats", { cache: "no-store" });
-    const data = await r.json();
-
+    const data = await fetchStats();
     const total = Number(data?.total || 0);
     const buckets = Array.isArray(data?.buckets) ? data.buckets : new Array(10).fill(0);
 
@@ -204,11 +178,8 @@ async function updateCoverStats() {
       if (v > bestVal) { bestVal = v; bestIdx = i; }
     }
 
-    const band = formatBandLabel(bestIdx);
-
-    if (elMost) elMost.textContent = total > 0 ? band : "—";
+    if (elMost) elMost.textContent = total > 0 ? formatBandLabel(bestIdx) : "—";
     if (elTotal) elTotal.textContent = String(total);
-
     if (elHint) {
       elHint.textContent = total > 0
         ? "This reflects aggregated, anonymous runs."
@@ -217,48 +188,52 @@ async function updateCoverStats() {
   } catch {
     if (elMost) elMost.textContent = "—";
     if (elTotal) elTotal.textContent = "—";
-    if (elHint) elHint.textContent = "Couldn’t load public summary (server not responding).";
+    if (elHint) elHint.textContent = "Couldn’t load the public summary.";
   }
 }
 
-/* =========================
-   COVER wiring
-   ========================= */
+// ============================================================
+// Mode switching
+// ============================================================
+
 function showCover() {
-  MODE = "cover";
+  mode = "cover";
   finished = false;
 
-  const cover = document.getElementById("cover");
-  const hud = document.getElementById("hud");
-  if (cover) cover.style.display = "flex";
-  if (hud) hud.style.display = "none";
+  if (elCover) elCover.style.display = "flex";
+  if (elHud) elHud.style.display = "none";
 
-  // stop quiz buttons
   if (btnThink) btnThink.disabled = true;
   if (btnAI) btnAI.disabled = true;
   if (btnRestart) btnRestart.style.display = "none";
 
-  // reset stats cache
   publicStats = null;
+  updateCoverStatsBox();
 
-  // ✅ refresh cover stats box
-  updateCoverStats();
-
-  // word background only
   initCoverWordPool();
   reseedNetWords();
   netDirty = true;
 }
 
 function startQuiz() {
-  MODE = "quiz";
+  mode = "quiz";
+  if (elCover) elCover.style.display = "none";
+  if (elHud) elHud.style.display = "flex";
 
-  const cover = document.getElementById("cover");
-  const hud = document.getElementById("hud");
-  if (cover) cover.style.display = "none";
-  if (hud) hud.style.display = "flex";
+  ensureBrain(); // lazy init
+  restartSession();
+}
 
-  // init brain only now (prevents cover lag)
+// Restart must return to cover (your requirement)
+function restartToCover() {
+  showCover();
+}
+
+// ============================================================
+// Brain init (lazy)
+// ============================================================
+
+function ensureBrain() {
   if (!brain) {
     brain = new BrainShape(
       width * 0.5,
@@ -270,22 +245,166 @@ function startQuiz() {
 
     liquidLayer = createGraphics(windowWidth, windowHeight);
     liquidLayer.pixelDensity(1);
-  } else {
-    brain.relocate(
-      width * 0.5,
-      height * 0.5,
-      Math.min(width * 0.52, 760),
-      Math.min(height * 0.55, 540)
-    );
-    liquid.relocate(brain);
+    return;
   }
 
-  restartSession();
+  brain.relocate(
+    width * 0.5,
+    height * 0.5,
+    Math.min(width * 0.52, 760),
+    Math.min(height * 0.55, 540)
+  );
+  liquid.relocate(brain);
+
+  liquidLayer = createGraphics(windowWidth, windowHeight);
+  liquidLayer.pixelDensity(1);
 }
 
-/* =========================
-   COVER word pool (local, fast)
-   ========================= */
+// ============================================================
+// Quiz flow
+// ============================================================
+
+function restartSession() {
+  round = 0;
+  askCount = 0;
+
+  shakeAmp = 0;
+  shakePulse = 0;
+  vapor = 0;
+
+  finished = false;
+  publicStats = null;
+
+  recentQuestions.length = 0;
+  reqSeq = 0;
+  inFlight = false;
+
+  if (brain) brain.reset();
+  if (liquid) liquid.reset();
+
+  btnRestart.style.display = "none";
+  btnThink.disabled = true;
+  btnAI.disabled = true;
+
+  elQuestion.innerText = "Starting…";
+  elMeta.innerText = "";
+  fitQuestionFont();
+
+  nextRound();
+}
+
+async function nextRound() {
+  if (finished || inFlight) return;
+  inFlight = true;
+  const mySeq = ++reqSeq;
+
+  round++;
+
+  if (round > TOTAL_ROUNDS) {
+    finished = true;
+    mode = "done";
+
+    btnThink.disabled = true;
+    btnAI.disabled = true;
+    btnRestart.style.display = "inline-block";
+
+    elMeta.innerText = `Round ${TOTAL_ROUNDS}/${TOTAL_ROUNDS} — AskAI: ${askCount}`;
+
+    await submitAndLoadStats();
+    inFlight = false;
+    return;
+  }
+
+  elQuestion.innerText = `Round ${round}:\nGenerating…`;
+  elMeta.innerText = `Round ${round}/${TOTAL_ROUNDS} — AskAI: ${askCount}`;
+  btnThink.disabled = true;
+  btnAI.disabled = true;
+  fitQuestionFont();
+
+  let q = "";
+  try {
+    const avoid = encodeURIComponent(recentQuestions.slice(-10).join(" || "));
+    const res = await fetch(
+      `/api/question?round=${round}&avoid=${avoid}&session=${SESSION_ID}&rand=${Math.random()}`,
+      { cache: "no-store" }
+    );
+    const data = await res.json();
+
+    if (mySeq !== reqSeq) { inFlight = false; return; }
+    if (data && data.question) q = sanitizePrompt(data.question);
+  } catch {}
+
+  if (!q || q.length < 20) q = sanitizePrompt(pick(FALLBACK_PROMPTS));
+  if (isTooSimilar(q)) q = sanitizePrompt(pick(FALLBACK_PROMPTS));
+
+  questionText = q;
+  elQuestion.innerText = `Round ${round}:\n${questionText}`;
+
+  recentQuestions.push(questionText);
+  if (recentQuestions.length > RECENT_Q_MAX) recentQuestions.shift();
+
+  refreshWordPoolLocalFromQuestion(questionText);
+  reseedNetWords();
+  netDirty = true;
+
+  elMeta.innerText = `Round ${round}/${TOTAL_ROUNDS} — AskAI: ${askCount}`;
+  fitQuestionFont();
+
+  btnThink.disabled = false;
+  btnAI.disabled = false;
+  inFlight = false;
+}
+
+function choose(useAI) {
+  if (finished || inFlight) return;
+
+  if (useAI) {
+    askCount++;
+
+    shakePulse = 18 + askCount * 2.5;
+    shakeAmp += 6 + askCount * 1.3;
+    vapor += 0.35;
+
+    brain.addDose(1);
+
+    const base = 80 + askCount * 14;
+    const jitter = (Math.random() * 40) | 0;
+    const n = Math.max(80, Math.min(160, base + jitter));
+    brain.dropFromBrain(n);
+
+    const level = askCount / TOTAL_ROUNDS;
+    liquid.setLevelTarget(level);
+    liquid.kickStorm(1.2 + askCount * 0.16);
+    liquid.splash();
+    liquid.shiftColor();
+  }
+
+  nextRound();
+}
+
+// Submit this run + fetch the updated public distribution
+async function submitAndLoadStats() {
+  const pct = Math.round((askCount / TOTAL_ROUNDS) * 100);
+
+  try {
+    await fetch("/api/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rate: pct })
+    });
+  } catch {}
+
+  try {
+    publicStats = await fetchStats();
+  } catch {
+    publicStats = null;
+  }
+}
+
+// ============================================================
+// Word pool (cover + quiz)
+// ============================================================
+
 function initCoverWordPool() {
   const base = [
     "ask","think","choose","prompt","rewrite","summarize","translate","outline","debug",
@@ -299,36 +418,94 @@ function initCoverWordPool() {
   wordPool = merged;
 }
 
-/* =========================
-   SETUP
-   ========================= */
+function refreshWordPoolLocalFromQuestion(text) {
+  const qWords = String(text || "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && w.length <= 14);
+
+  const base = [
+    "rewrite","summarize","translate","plan","explain","debug","outline","polish","clarify",
+    "academic","evidence","argument","method","critique","examples","structure","ethics",
+    "limitations","counterargument","definition","hypothesis","design","poster","email","notes"
+  ];
+
+  const seen = new Set();
+  const merged = [];
+
+  for (const w of qWords) {
+    if (!w || seen.has(w)) continue;
+    seen.add(w);
+    merged.push(w);
+  }
+  for (const w of base) {
+    if (seen.has(w)) continue;
+    seen.add(w);
+    merged.push(w);
+  }
+
+  wordPool = merged;
+
+  const need = net.cols * net.rows;
+  while (wordPool.length < need) wordPool = wordPool.concat(merged);
+}
+
+function reseedNetWords() {
+  const totalCells = net.cols * net.rows;
+  const pool = wordPool.slice();
+  shuffleInPlace(pool);
+
+  netWords = new Array(totalCells);
+  for (let i = 0; i < totalCells; i++) {
+    if (i >= pool.length) {
+      const extra = wordPool.slice();
+      shuffleInPlace(extra);
+      pool.push(...extra);
+    }
+    const w = pool[i] || "";
+    netWords[i] = (w.length > 12) ? w.slice(0, 12) : w;
+  }
+}
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+}
+
+// ============================================================
+// p5 lifecycle
+// ============================================================
+
 function setup() {
   createCanvas(windowWidth, windowHeight);
   frameRate(60);
   textFont("ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace");
 
-  uiQuestion = document.getElementById("question");
-  uiMeta = document.getElementById("meta");
+  // DOM hooks
+  elCover = document.getElementById("cover");
+  elHud = document.getElementById("hud");
+  elQuestion = document.getElementById("question");
+  elMeta = document.getElementById("meta");
+
+  btnStart = document.getElementById("btn-start");
   btnThink = document.getElementById("btn-think");
   btnAI = document.getElementById("btn-ai");
   btnRestart = document.getElementById("btn-restart");
 
+  btnStart.onclick = startQuiz;
   btnThink.onclick = () => choose(false);
   btnAI.onclick = () => choose(true);
-  btnRestart.onclick = () => {
-    // restart should go back to cover (as you requested)
-    showCover();
-  };
+  btnRestart.onclick = restartToCover;
 
-  // Start button on cover
-  const btnStart = document.getElementById("btn-start");
-  if (btnStart) btnStart.onclick = () => startQuiz();
-
-  // word net graphics
+  // background layer
   netLayer = createGraphics(windowWidth, windowHeight);
   netLayer.pixelDensity(1);
 
-  // start in cover mode
   showCover();
 }
 
@@ -339,29 +516,16 @@ function windowResized() {
   netLayer.pixelDensity(1);
   netDirty = true;
 
-  if (brain && liquid) {
-    brain.relocate(
-      width * 0.5,
-      height * 0.5,
-      Math.min(width * 0.52, 760),
-      Math.min(height * 0.55, 540)
-    );
-    liquid.relocate(brain);
-
-    liquidLayer = createGraphics(windowWidth, windowHeight);
-    liquidLayer.pixelDensity(1);
+  if (mode !== "cover") {
+    ensureBrain();
+    fitQuestionFont();
   }
-
-  if (MODE === "quiz") fitQuestionFont();
 }
 
-/* =========================
-   DRAW
-   ========================= */
 function draw() {
   background(0);
 
-  // always draw interactive word background
+  // word net always runs (cover + quiz + done)
   netTick++;
   if (netDirty || netTick % 2 === 0) {
     renderWordNetToLayer(netLayer);
@@ -369,8 +533,8 @@ function draw() {
   }
   image(netLayer, 0, 0);
 
-  // quiz visuals only in quiz/done
-  if (MODE !== "cover" && brain && liquid) {
+  // brain only after Start
+  if (mode !== "cover" && brain && liquid) {
     brain.updateDebris();
     liquid.update();
 
@@ -410,197 +574,10 @@ function draw() {
   }
 }
 
-/* =========================
-   QUIZ FLOW
-   ========================= */
-function restartSession() {
-  round = 0;
-  askCount = 0;
-  shakeAmp = 0;
-  shakePulse = 0;
-  vapor = 0;
-  finished = false;
+// ============================================================
+// Word net renderer
+// ============================================================
 
-  recentQuestions = [];
-  _reqSeq = 0;
-  _inFlight = false;
-
-  publicStats = null;
-
-  brain.reset();
-  liquid.reset();
-
-  btnRestart.style.display = "none";
-  btnThink.disabled = true;
-  btnAI.disabled = true;
-
-  uiQuestion.innerText = "Starting…";
-  uiMeta.innerText = "";
-  fitQuestionFont();
-
-  nextRound();
-}
-
-async function nextRound() {
-  if (finished) return;
-  if (_inFlight) return;
-  _inFlight = true;
-
-  const mySeq = ++_reqSeq;
-  round++;
-
-  if (round > totalRounds) {
-    finished = true;
-    MODE = "done";
-
-    btnThink.disabled = true;
-    btnAI.disabled = true;
-    btnRestart.style.display = "inline-block";
-
-    uiMeta.innerText = `Round ${totalRounds}/${totalRounds} — AskAI: ${askCount}`;
-
-    await submitResultAndFetchStats();
-
-    _inFlight = false;
-    return;
-  }
-
-  uiQuestion.innerText = `Round ${round}:\nGenerating…`;
-  uiMeta.innerText = `Round ${round}/${totalRounds} — AskAI: ${askCount}`;
-  btnThink.disabled = true;
-  btnAI.disabled = true;
-  fitQuestionFont();
-
-  let q = "";
-  try {
-    const avoid = encodeURIComponent(recentQuestions.slice(-10).join(" || "));
-    const qRes = await fetch(
-      `/api/question?round=${round}&avoid=${avoid}&session=${SESSION_ID}&rand=${Math.random()}`,
-      { cache: "no-store" }
-    );
-    const qData = await qRes.json();
-    if (mySeq !== _reqSeq) { _inFlight = false; return; }
-    if (qData && qData.question) q = sanitizePrompt(qData.question);
-  } catch {}
-
-  if (!q || q.length < 20) q = sanitizePrompt(pick(FALLBACK_PROMPTS));
-  if (isTooSimilar(q)) q = sanitizePrompt(pick(FALLBACK_PROMPTS));
-
-  questionText = q;
-  uiQuestion.innerText = `Round ${round}:\n${questionText}`;
-
-  recentQuestions.push(questionText);
-  if (recentQuestions.length > RECENT_Q_MAX) recentQuestions.shift();
-
-  refreshWordPoolLocalFromQuestion(questionText);
-  reseedNetWords();
-  netDirty = true;
-
-  uiMeta.innerText = `Round ${round}/${totalRounds} — AskAI: ${askCount}`;
-  fitQuestionFont();
-
-  btnThink.disabled = false;
-  btnAI.disabled = false;
-  _inFlight = false;
-}
-
-function choose(useAI) {
-  if (finished) return;
-  if (_inFlight) return;
-
-  if (useAI) {
-    askCount++;
-
-    shakePulse = 18 + askCount * 2.5;
-    shakeAmp += 6 + askCount * 1.3;
-    vapor += 0.35;
-
-    brain.addDose(1);
-
-    const base = 80 + askCount * 14;
-    const jitter = (Math.random() * 40) | 0;
-    const n = Math.max(80, Math.min(160, base + jitter));
-    brain.dropFromBrain(n);
-
-    const level = askCount / totalRounds;
-    liquid.setLevelTarget(level);
-    liquid.kickStorm(1.2 + askCount * 0.16);
-    liquid.splash();
-    liquid.shiftColor();
-  }
-
-  nextRound();
-}
-
-/* =========================
-   WORD POOL (fast local)
-   ========================= */
-function refreshWordPoolLocalFromQuestion(fromQuestionText) {
-  const qWords = String(fromQuestionText || "")
-    .toLowerCase()
-    .replace(/[^\w\s]/g, " ")
-    .split(/\s+/)
-    .filter(w => w.length >= 3 && w.length <= 14);
-
-  const base = [
-    "rewrite","summarize","translate","plan","explain","debug","outline","polish","clarify",
-    "academic","evidence","argument","method","critique","examples","structure","ethics",
-    "limitations","counterargument","definition","hypothesis","design","poster","email","notes"
-  ];
-
-  const seen = new Set();
-  const merged = [];
-
-  for (const w of qWords) {
-    if (!w || seen.has(w)) continue;
-    seen.add(w);
-    merged.push(w);
-  }
-
-  for (let i = 0; i < base.length; i++) {
-    const w = base[i];
-    if (seen.has(w)) continue;
-    seen.add(w);
-    merged.push(w);
-  }
-
-  wordPool = merged;
-
-  const need = net.cols * net.rows;
-  while (wordPool.length < need) {
-    wordPool = wordPool.concat(merged);
-  }
-}
-
-function reseedNetWords() {
-  const totalCells = net.cols * net.rows;
-  const pool = wordPool.slice();
-  shuffleInPlace(pool);
-
-  netWords = new Array(totalCells);
-  for (let i = 0; i < totalCells; i++) {
-    if (i >= pool.length) {
-      const extra = wordPool.slice();
-      shuffleInPlace(extra);
-      pool.push(...extra);
-    }
-    const w = pool[i] || "";
-    netWords[i] = (w.length > 12) ? w.slice(0, 12) : w;
-  }
-}
-
-function shuffleInPlace(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    const tmp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = tmp;
-  }
-}
-
-/* =========================
-   WORD NET RENDER
-   ========================= */
 function renderWordNetToLayer(g) {
   g.clear();
   if (!netWords || netWords.length === 0) return;
@@ -690,12 +667,13 @@ function renderWordNetToLayer(g) {
   }
 }
 
-/* =========================
-   Overlays + Result + Chart
-   ========================= */
+// ============================================================
+// Overlays
+// ============================================================
+
 function drawGlitchOverlay() {
   if (askCount <= 0) return;
-  const strength = constrain(askCount / totalRounds, 0, 1);
+  const strength = constrain(askCount / TOTAL_ROUNDS, 0, 1);
   const lines = floor(3 + strength * 14);
 
   noStroke();
@@ -709,8 +687,7 @@ function drawGlitchOverlay() {
 }
 
 function drawEndOverlayFixed() {
-  const rate = askCount / totalRounds;
-  const pct = Math.round(rate * 100);
+  const pct = Math.round((askCount / TOTAL_ROUNDS) * 100);
 
   const pad = 22;
   const boxW = Math.min(520, width - pad * 2);
@@ -728,12 +705,11 @@ function drawEndOverlayFixed() {
 
   textSize(14);
   fill(255, 200);
-  text(`Ask AI ${askCount}/${totalRounds}`, pad + 18, pad + 62);
+  text(`Ask AI ${askCount}/${TOTAL_ROUNDS}`, pad + 18, pad + 62);
 
   textSize(12);
   fill(255, 160);
   text(`Restart returns to cover`, pad + 18, pad + 84);
-
   pop();
 }
 
@@ -797,9 +773,10 @@ function drawPublicHistogramPanel() {
   pop();
 }
 
-/* =========================
-   LIQUID + BRAIN
-   ========================= */
+// ============================================================
+// Brain + liquid classes (kept intact)
+// ============================================================
+
 class LiquidBrain {
   constructor(brainRef) {
     this.brain = brainRef;
@@ -1051,11 +1028,11 @@ class BrainShape {
 
   addDose(n) {
     this.doses += n;
-    this.targetFill = constrain(this.doses / totalRounds, 0, 1);
+    this.targetFill = constrain(this.doses / TOTAL_ROUNDS, 0, 1);
   }
 
   getBreathScale() {
-    const rate = constrain(askCount / totalRounds, 0, 1);
+    const rate = constrain(askCount / TOTAL_ROUNDS, 0, 1);
     const breathAmp = 0.010 + rate * 0.004;
     const breathSpeed = 0.017 + rate * 0.008;
     const b = 0.5 + 0.5 * sin(frameCount * breathSpeed);
@@ -1068,7 +1045,7 @@ class BrainShape {
     if (!candidates.length) return;
 
     const s = this.getBreathScale();
-    const rate = constrain(askCount / totalRounds, 0, 1);
+    const rate = constrain(askCount / TOTAL_ROUNDS, 0, 1);
 
     for (let k = 0; k < n; k++) {
       if (!candidates.length) break;
@@ -1082,7 +1059,6 @@ class BrainShape {
       const gp = this.glyphPoints[gi];
 
       const cut = gp.tile * this.cutScale;
-
       const img = this.getMaskedPatch(gp.gx, gp.gy, cut);
       if (!img) continue;
 
@@ -1198,7 +1174,6 @@ class BrainShape {
 
     push();
     imageMode(CENTER);
-
     for (const d of this.debris) {
       push();
       translate(d.x, d.y);
