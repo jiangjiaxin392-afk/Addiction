@@ -25,45 +25,45 @@ const client =
    Prompt pools (offline fallback)
    ----------------------------- */
 const FALLBACK = {
-  academic_writing: [
-    "You have a draft paragraph for a class report that sounds generic. Rewrite it to be clearer and more specific, keeping the meaning unchanged.",
-    "Your supervisor says your abstract feels stiff. Polish the tone so it reads academic but still natural, without adding new claims."
+  study_writing: [
+    "After rereading a class paragraph, the wording feels repetitive and the main claim is easy to miss. Rewrite it so the point is clearer, without adding new facts.",
+    "A short reflection draft sounds stiff and over-formal. Polish it into an academic tone that still reads naturally, keeping the meaning unchanged."
   ],
-  academic_summary: [
-    "You took dense reading notes and now need a clean summary you can review quickly. Turn the notes into a short, well-structured recap with clear headings.",
-    "You have a long paragraph from an article and want the core idea fast. Summarize it in plain language while preserving the main point."
+  study_summary: [
+    "Lecture notes are scattered across headings, half-sentences, and arrows. Restructure them into a clean summary that is easy to review.",
+    "A dense article paragraph buries the key idea under definitions and examples. Summarise it in plain English while preserving the central point."
   ],
-  research_methods: [
-    "You drafted a short research idea but the method is unclear. Rewrite it so the method, data source, and limitation are explicit and easy to understand.",
-    "You need to justify your research method to a tutor. Make the justification clearer and more convincing, without sounding overconfident."
+  online_life: [
+    "A comment you typed could easily be read as sarcastic, even if you didn’t mean it that way. Rewrite it to keep the point but reduce the chance of misreading.",
+    "A short post draft feels unclear and slightly awkward. Rewrite it so it sounds human, readable, and easy to understand."
+  ],
+  common_sense: [
+    "A friend shares a neat-sounding claim that feels too convenient to trust. Rewrite a reply that checks assumptions and asks good questions without sounding smug.",
+    "Someone asks for a simple explanation of a concept they keep mixing up. Rewrite your explanation so it stays accurate but feels easy to follow."
   ],
   daily_life: [
-    "You need to message a roommate about a recurring chore issue without sounding aggressive. Rewrite your message to be calm, clear, and cooperative.",
-    "You’re organizing a busy week and keep forgetting small tasks. Turn your messy list into a simple plan that’s easy to follow."
+    "A small recurring issue at home keeps coming back, but you don’t want to start an argument. Rewrite a message that is calm, clear, and cooperative.",
+    "A week plan exists in fragments—sticky notes, screenshots, and half-finished lists. Turn it into a simple plan that is easy to follow."
   ],
   travel_planning: [
-    "You’re planning a short trip but your notes are scattered across chats and screenshots. Turn them into a simple itinerary that feels realistic and easy to follow.",
-    "You want to plan a day out in a new city without over-scheduling. Propose a flexible plan with a clear flow and a backup idea."
-  ],
-  workplace_comms: [
-    "You need to reply to a teammate who misunderstood your message. Rewrite your response to be friendly, precise, and de-escalating.",
-    "You’re asking for clarification in a group chat. Rewrite your question so it’s concise and specific, without sounding demanding."
+    "Plans are scattered across chat messages and screenshots, and nobody agrees on what matters most. Turn the notes into a flexible itinerary with a sensible flow.",
+    "A day plan in a new city keeps growing into too many stops. Propose a route that stays flexible and doesn’t feel rushed."
   ],
   decision_tradeoff: [
-    "You’re stuck between two options and keep changing your mind. Help structure a decision by clarifying what matters most and what you’d trade off.",
-    "You need to pick a direction for a small project. Turn your scattered thoughts into a clear comparison that makes the choice easier."
+    "Two options both sound good for different reasons, so the decision keeps stalling. Structure the choice by clarifying priorities and trade-offs.",
+    "A small project needs a direction, but the pros and cons are still fuzzy. Rewrite your thoughts into a clear comparison that supports a decision."
   ],
-  creative_poster: [
-    "Your poster draft feels flat and hard to scan. Suggest concrete layout improvements that make hierarchy and focus clearer.",
-    "You have a concept but the composition feels empty. Propose a stronger visual structure that guides the viewer’s eye."
+  creative_design: [
+    "A poster draft looks busy but still feels flat, like everything has the same weight. Suggest concrete layout changes that improve hierarchy and focus.",
+    "A concept is strong, but the composition doesn’t guide the eye. Propose a clearer visual structure that makes the focal point obvious."
   ],
   code_debug: [
-    "A small p5.js sketch stutters and you don’t know why. Suggest likely causes and a minimal first fix to test, with a short explanation.",
-    "Your Node endpoint sometimes returns empty data. Propose a debugging approach and the first code change you would try."
+    "A p5.js sketch runs smoothly at first, then starts stuttering. Suggest likely causes and one minimal fix to test first, with a brief reason.",
+    "A Node endpoint sometimes returns empty data without obvious errors. Suggest a debugging path and the first code change you would try."
   ],
-  presentation_copy: [
-    "Your slide text feels crowded and unclear. Rewrite it to be tighter and easier to present aloud, while keeping key points.",
-    "You have a talk topic but no structure. Propose a clean slide outline that flows logically from problem to takeaway."
+  communication: [
+    "In a group chat, your tone was misread and the thread is getting tense. Rewrite a reply that is friendly, precise, and de-escalating.",
+    "A clarification request needs to be asked in a busy channel without sounding demanding. Rewrite the message to be specific and polite."
   ]
 };
 
@@ -74,13 +74,13 @@ function pick(arr) {
 /* -----------------------------
    Session memory (anti-repeat)
    ----------------------------- */
-const sessionStore = new Map(); // sessionId -> { prompts: string[], plan: string[], lastSeen: number }
+const sessionStore = new Map(); // sessionId -> { prompts: string[], plan: string[], lenPlan: ("short"|"long")[], lastSeen: number }
 
 function getSession(sessionIdRaw) {
   const id = sessionIdRaw && String(sessionIdRaw).trim() ? String(sessionIdRaw).trim() : "default";
   let s = sessionStore.get(id);
   if (!s) {
-    s = { prompts: [], plan: null, lastSeen: Date.now() };
+    s = { prompts: [], plan: null, lenPlan: null, lastSeen: Date.now() };
     sessionStore.set(id, s);
   } else {
     s.lastSeen = Date.now();
@@ -88,7 +88,6 @@ function getSession(sessionIdRaw) {
   return s;
 }
 
-// Light cleanup: if nobody requests for ~30 min, we drop the session memory.
 setInterval(() => {
   const now = Date.now();
   const TTL = 1000 * 60 * 30;
@@ -98,20 +97,19 @@ setInterval(() => {
 }, 1000 * 60 * 5);
 
 /* -----------------------------
-   10-round category plan
-   Academic max 3, others once each
+   10-round theme plan (all unique)
    ----------------------------- */
-const PLAN_CATS = [
-  "academic_writing",
-  "academic_summary",
-  "research_methods",
+const PLAN_THEMES = [
   "daily_life",
-  "travel_planning",
-  "workplace_comms",
-  "decision_tradeoff",
-  "creative_poster",
+  "study_writing",
+  "online_life",
+  "common_sense",
   "code_debug",
-  "presentation_copy"
+  "creative_design",
+  "travel_planning",
+  "decision_tradeoff",
+  "communication",
+  "study_summary"
 ];
 
 function shuffleInPlace(arr) {
@@ -123,31 +121,51 @@ function shuffleInPlace(arr) {
 }
 
 function ensurePlan(sess) {
-  if (!sess.plan || sess.plan.length !== 10) sess.plan = shuffleInPlace(PLAN_CATS.slice());
+  if (!sess.plan || sess.plan.length !== 10) sess.plan = shuffleInPlace(PLAN_THEMES.slice());
   return sess.plan;
 }
 
-function categoryForRound(sess, round) {
+function themeForRound(sess, round) {
   const plan = ensurePlan(sess);
   const r = Math.max(1, Math.min(10, Number(round) || 1));
   return plan[r - 1];
 }
 
-function tagsForCategory(cat) {
+function tagsForTheme(theme) {
   const tags = {
-    academic_writing: { type: "writing", difficulty: 2, uncertainty: 2 },
-    academic_summary: { type: "study", difficulty: 2, uncertainty: 2 },
-    research_methods: { type: "study", difficulty: 3, uncertainty: 3 },
-
     daily_life: { type: "life", difficulty: 2, uncertainty: 2 },
-    travel_planning: { type: "life", difficulty: 2, uncertainty: 2 },
-    workplace_comms: { type: "writing", difficulty: 2, uncertainty: 2 },
-    decision_tradeoff: { type: "life", difficulty: 2, uncertainty: 2 },
-    creative_poster: { type: "creative", difficulty: 2, uncertainty: 3 },
+    study_writing: { type: "study", difficulty: 2, uncertainty: 2 },
+    study_summary: { type: "study", difficulty: 2, uncertainty: 2 },
+    online_life: { type: "life", difficulty: 2, uncertainty: 2 },
+    common_sense: { type: "general", difficulty: 2, uncertainty: 2 },
     code_debug: { type: "code", difficulty: 3, uncertainty: 2 },
-    presentation_copy: { type: "writing", difficulty: 2, uncertainty: 2 }
+    creative_design: { type: "creative", difficulty: 2, uncertainty: 3 },
+    travel_planning: { type: "life", difficulty: 2, uncertainty: 2 },
+    decision_tradeoff: { type: "life", difficulty: 2, uncertainty: 2 },
+    communication: { type: "writing", difficulty: 2, uncertainty: 2 }
   };
-  return tags[cat] || { type: "general", difficulty: 2, uncertainty: 2 };
+  return tags[theme] || { type: "general", difficulty: 2, uncertainty: 2 };
+}
+
+/* -----------------------------
+   10-round length plan (4 short + 6 long)
+   Short is still concrete: situation + artifact + task.
+   ----------------------------- */
+function ensureLengthPlan(sess) {
+  if (sess.lenPlan && sess.lenPlan.length === 10) return sess.lenPlan;
+
+  const plan = []
+    .concat(new Array(4).fill("short"))
+    .concat(new Array(6).fill("long"));
+
+  sess.lenPlan = shuffleInPlace(plan);
+  return sess.lenPlan;
+}
+
+function lengthForRound(sess, round) {
+  const p = ensureLengthPlan(sess);
+  const r = Math.max(1, Math.min(10, Number(round) || 1));
+  return p[r - 1];
 }
 
 /* -----------------------------
@@ -211,45 +229,116 @@ function looksIncomplete(t) {
 
 /* -----------------------------
    Prompt generation (OpenAI)
-   Notes:
-   - keeps constraints “light”
-   - avoids strong time/budget language
-   - varies phrasing and length
    ----------------------------- */
-const CATEGORY_GUIDE = {
-  academic_writing:
-    "Academic writing polish. Artifact: abstract/paragraph/statement. Constraints: tone, clarity, no new claims. Avoid travel contexts.",
-  academic_summary:
-    "Summarize or structure. Artifact: notes/article paragraph. Constraints: readability and organisation. Avoid travel contexts.",
-  research_methods:
-    "Methods clarity. Artifact: short proposal. Constraints: explicit method, assumptions, limitations. Avoid travel contexts.",
+const THEME_GUIDE = {
   daily_life:
-    "Everyday life. Artifact: text message / small plan / request. Keep it local and ordinary (home, campus, friends). Avoid travel scenarios.",
-  travel_planning:
-    "Travel planning. Artifact: scattered notes. Constraints: flexible flow, practicality.",
-  workplace_comms:
-    "Work/school communication. Artifact: email/chat reply. Constraints: professional but human, de-escalating. Avoid travel contexts.",
-  decision_tradeoff:
-    "Trade-off thinking. Artifact: two options. Constraints: priorities, pros/cons, decision framing. Avoid travel contexts unless explicitly relevant.",
-  creative_poster:
-    "Poster/design improvement. Artifact: layout description. Constraints: hierarchy, scanability, focus. Avoid travel contexts.",
+    "Ordinary daily situation. Artifact: text message, short note, small plan. Keep it grounded (home/campus/friends).",
+  study_writing:
+    "Study writing polish. Artifact: paragraph/reflection/short statement. Keep meaning; improve clarity; avoid new claims.",
+  study_summary:
+    "Study summarising/structuring. Artifact: notes/dense paragraph. Goal: readability and a clear structure.",
+  online_life:
+    "Online life and tone. Artifact: comment, post draft, DM, reply. Focus on clarity and misinterpretation risk.",
+  common_sense:
+    "Common sense / media literacy. Artifact: claim, explanation, short argument. Focus on checking assumptions and clarity.",
   code_debug:
-    "Light debugging. Artifact: code + symptom. Constraint: minimal first change, explain why. Avoid travel contexts.",
-  presentation_copy:
-    "Slides/speaking. Artifact: slide text/outline. Constraints: clarity for speaking, easy scanning. Avoid travel contexts."
+    "Debug/performance. Artifact: code + symptom. Prefer a minimal first fix and a brief reason.",
+  creative_design:
+    "Design/poster/visual communication. Artifact: layout description. Focus on hierarchy, scanability, and focus.",
+  travel_planning:
+    "Travel planning (only once per run). Artifact: scattered notes. Keep it flexible; avoid prices and strict schedules.",
+  decision_tradeoff:
+    "Decision framing. Artifact: two options. Focus on priorities and trade-offs, not time/budget.",
+  communication:
+    "Communication in social/work contexts. Artifact: chat message, reply, short announcement. Avoid making every case an email."
 };
 
 const VIBE_SEEDS = [
-  "Write it like a real moment someone would describe to a friend.",
-  "Make it sound like a quick task you’d genuinely do today.",
-  "Keep it slightly awkward in a realistic way, not dramatic.",
-  "Make it direct, like a note you left for yourself.",
-  "Make it feel like you’re under mild pressure, but not panicking."
+  "Let the wording breathe; make it sound like a real moment.",
+  "Vary the sentence rhythm; avoid a repeated template.",
+  "Make it specific enough to picture, but not melodramatic.",
+  "Keep the tone human and slightly imperfect, like real drafting.",
+  "Make the task clear without turning it into an instruction sheet."
 ];
 
-// Extra filters to stop “travel leakage” and money obsession.
+const SCENE_SEEDS = {
+  daily_life: [
+    "a roommate texting about a small recurring issue",
+    "a friend waiting on a reply you forgot",
+    "a to-do list that keeps growing without order",
+    "an apology that should not become a long essay",
+    "a reminder you want to sound kind, not bossy"
+  ],
+  study_writing: [
+    "a paragraph that repeats the same phrase",
+    "a claim that sounds confident but is vague",
+    "a reflection that swings between too dramatic and too flat",
+    "a conclusion that doesn’t actually conclude",
+    "a draft that needs a calmer academic tone"
+  ],
+  study_summary: [
+    "notes mixing quotes and your own thoughts",
+    "a reading where the key idea is buried",
+    "a lecture recap that is too long to revise",
+    "a paragraph full of definitions that needs order",
+    "a section that needs a clean structure for revision"
+  ],
+  online_life: [
+    "a comment thread where tone is easy to misread",
+    "a short post draft that could be misunderstood",
+    "a DM that should be clear but not intense",
+    "a reply that should calm things down",
+    "a caption that needs to sound natural, not forced"
+  ],
+  common_sense: [
+    "a viral claim that sounds too neat to be true",
+    "a simple concept someone keeps misunderstanding",
+    "an argument that needs clearer assumptions",
+    "a disagreement where you want to ask better questions",
+    "a short explanation that should be accurate but simple"
+  ],
+  code_debug: [
+    "a sketch that slows down after a minute",
+    "a bug that appears only after several clicks",
+    "a fetch that sometimes returns nothing",
+    "a performance drop from drawing too much per frame",
+    "a state issue you want to isolate with a minimal test"
+  ],
+  creative_design: [
+    "a poster where everything looks equally important",
+    "a layout that feels empty in the centre",
+    "a design that reads fine up close but not from a distance",
+    "a concept that needs a stronger focal point",
+    "a draft that needs clearer hierarchy and spacing"
+  ],
+  travel_planning: [
+    "friends sending suggestions with different tastes",
+    "a day plan that should feel flexible, not rushed",
+    "too many stops that need simplification",
+    "a route that needs a clear flow and a backup",
+    "notes scattered across chat and screenshots"
+  ],
+  decision_tradeoff: [
+    "two directions with different risks",
+    "a trade-off between clarity and ambition",
+    "a choice you keep postponing",
+    "priorities that conflict with each other",
+    "an option comparison you want to keep honest"
+  ],
+  communication: [
+    "a group chat misunderstanding your tone",
+    "a short update that needs to be readable fast",
+    "a clarification request in a busy channel",
+    "a reply that should de-escalate tension",
+    "a message that should be firm but not cold"
+  ]
+};
+
 const TRAVEL_RE = /\b(trip|travel|itinerary|flight|airport|hotel|hostel|visa|booking|train ticket|boarding pass|city break)\b/i;
 const MONEY_RE = /\b(budget|price|cost|expensive|cheap|afford|dollars|usd|eur|euro|pounds|gbp|yen|rmb|cny)\b|[$€£¥]/i;
+
+// "You/You're" template avoidance (server-side guard)
+const YOU_START_RE = /^\s*(you|you’re|you're|you have|you need)\b/i;
 
 function mentionsTravel(text) {
   return TRAVEL_RE.test(String(text || ""));
@@ -259,39 +348,55 @@ function mentionsMoney(text) {
   return MONEY_RE.test(String(text || ""));
 }
 
-async function generateScenarioPrompt({ cat, avoidText }) {
+function startsTooTemplate(text) {
+  return YOU_START_RE.test(String(text || ""));
+}
+
+function lengthDirective(lenKind) {
+  if (lenKind === "short") {
+    return "Length target: 1–2 sentences, but still concrete (situation + artifact + exact task). Do not write a vague abstract prompt.";
+  }
+  return "Length target: 3–4 sentences, with natural detail and a clear task.";
+}
+
+async function generateScenarioPrompt({ theme, avoidText, lenKind }) {
   const system = [
     "You generate ONE English scenario-based task prompt for a public interactive artwork.",
     "The user must choose: do it themselves vs ask an AI assistant.",
     "",
     "Requirements:",
-    "- Specific, concrete situation. Mention the artifact (message/email/notes/draft/itinerary/code/slide text).",
+    "- Specific, concrete situation. Mention the artifact (message/comment/notes/draft/code/slide text/itinerary).",
     "- The task must be unambiguous (rewrite/plan/clarify/structure/compare/debug/etc.).",
-    "- Include a constraint, but keep it natural and lightweight.",
-    "- Avoid money/price/budget constraints unless absolutely necessary.",
-    "",
-    "Variation:",
-    "- Vary length: 1–4 sentences.",
-    "- Vary opening phrasing; don’t repeat the same template.",
+    "- Include a constraint, but keep it natural and lightweight (tone/clarity/faithfulness/readability).",
+    "- Avoid money/price/budget constraints.",
+    "- Avoid strict time limits and countdowns.",
     "- No lists, no bullet points, no numbering, no quotes.",
     "- Do NOT mention 'Round' or 'AskAI'.",
     "- Must end with proper punctuation; never use ellipses.",
+    "",
+    "Style (important):",
+    "- Do NOT keep starting with 'You' or 'You’re'. Use varied openings such as 'A friend...', 'After class...', 'In a group chat...', 'Someone...', 'A draft...'.",
+    "- Vary sentence rhythm; avoid a repeated template.",
     "",
     "Return ONLY the prompt text."
   ].join("\n");
 
   const vibe = VIBE_SEEDS[(Math.random() * VIBE_SEEDS.length) | 0];
+  const pool = SCENE_SEEDS[theme] || ["a realistic situation with a clear artifact"];
+  const scene = pool[(Math.random() * pool.length) | 0];
 
   const user = [
-    `Category: ${cat}`,
-    CATEGORY_GUIDE[cat] || "Practical scenario task.",
+    `Theme: ${theme}`,
+    THEME_GUIDE[theme] || "Practical scenario task.",
+    `Scenario seed: ${scene}`,
+    lengthDirective(lenKind),
     vibe,
     avoidText ? `Avoid similar topics/phrasing to:\n${avoidText}` : ""
   ].filter(Boolean).join("\n\n");
 
   const r = await client.chat.completions.create({
     model: "gpt-4o-mini",
-    temperature: 1.15,
+    temperature: 1.18,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user }
@@ -310,38 +415,47 @@ app.get("/api/question", async (req, res) => {
   const avoid = String(req.query.avoid || "").trim();
 
   const sess = getSession(sessionId);
-  const cat = categoryForRound(sess, round);
+  const theme = themeForRound(sess, round);
+  const lenKind = lengthForRound(sess, round);
 
   const avoidList = []
     .concat(sess.prompts.slice(-22))
     .concat(avoid ? [avoid] : []);
 
-  // If no API key, serve local fallback for the requested category.
   if (!client) {
-    const pool = FALLBACK[cat] || FALLBACK.daily_life;
+    const pool = FALLBACK[theme] || FALLBACK.daily_life;
     const q = pick(pool);
     sess.prompts.push(q);
-    return res.json({ question: q, tags: tagsForCategory(cat) });
+    return res.json({
+      question: q,
+      tags: tagsForTheme(theme),
+      source: "fallback",
+      reason: "client_not_ready"
+    });
   }
 
   try {
     let best = "";
-    const maxTries = 22;
+    const maxTries = 34;
 
     for (let i = 0; i < maxTries; i++) {
       const candidate = await generateScenarioPrompt({
-        cat,
+        theme,
+        lenKind,
         avoidText: avoidList.join("\n---\n")
       });
 
       if (!candidate) continue;
       if (looksIncomplete(candidate)) continue;
 
-      // ✅ stop “travel leakage”
-      if (cat !== "travel_planning" && mentionsTravel(candidate)) continue;
+      // Travel should only happen in the travel theme.
+      if (theme !== "travel_planning" && mentionsTravel(candidate)) continue;
 
-      // ✅ stop money obsession (almost never mention money)
+      // Avoid money language almost entirely.
       if (mentionsMoney(candidate)) continue;
+
+      // Avoid repetitive "You're..." openings (stronger in early tries).
+      if (i < 24 && startsTooTemplate(candidate)) continue;
 
       if (tooSimilar(candidate, avoidList, 0.46)) continue;
 
@@ -350,19 +464,36 @@ app.get("/api/question", async (req, res) => {
     }
 
     if (!best) {
-      const pool = FALLBACK[cat] || FALLBACK.daily_life;
+      const pool = FALLBACK[theme] || FALLBACK.daily_life;
       best = pick(pool);
+      sess.prompts.push(best);
+      return res.json({
+        question: best,
+        tags: tagsForTheme(theme),
+        source: "fallback",
+        reason: "no_candidate_passed_filters"
+      });
     }
 
     sess.prompts.push(best);
     if (sess.prompts.length > 160) sess.prompts.shift();
 
-    res.json({ question: best, tags: tagsForCategory(cat) });
-  } catch {
-    const pool = FALLBACK[cat] || FALLBACK.daily_life;
+    res.json({
+      question: best,
+      tags: tagsForTheme(theme),
+      source: "openai",
+      length: lenKind
+    });
+  } catch (e) {
+    const pool = FALLBACK[theme] || FALLBACK.daily_life;
     const q = pick(pool);
     sess.prompts.push(q);
-    res.json({ question: q, tags: tagsForCategory(cat) });
+    res.json({
+      question: q,
+      tags: tagsForTheme(theme),
+      source: "fallback",
+      error: String(e?.message || e)
+    });
   }
 });
 
@@ -375,7 +506,7 @@ const STATS_PATH = path.join(DATA_DIR, "stats.json");
 
 function bucketIndex(rate) {
   const r = Math.max(0, Math.min(100, Number(rate)));
-  return r >= 100 ? 9 : Math.floor(r / 10); // 0–9, 10–19, ..., 90–100
+  return r >= 100 ? 9 : Math.floor(r / 10);
 }
 
 function defaultStats() {
@@ -403,9 +534,7 @@ function saveStats(stats) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(STATS_PATH, JSON.stringify(stats, null, 2), "utf-8");
-  } catch {
-    // For a short-lived deployment this is fine; you can add logging later if needed.
-  }
+  } catch {}
 }
 
 let STATS = loadStats();
@@ -429,8 +558,5 @@ app.post("/api/submit", (req, res) => {
   res.json({ ok: true });
 });
 
-/* -----------------------------
-   Boot
-   ----------------------------- */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Running on http://localhost:${PORT}`));

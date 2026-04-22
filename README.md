@@ -1,4 +1,4 @@
-# Addiction# Addiction — AI Reliance Test (Interactive Web Artwork)
+Addiction — AI Reliance Test (Interactive Web Artwork)
 **Author:** Aaron Jiang  
 **Project:** Addiction  
 
@@ -51,4 +51,10 @@ No personal text, no prompts, no identifiers are stored.
 1) Install
 ```bash
 npm install
-
+2) Create .env
+```bash
+OPENAI_API_KEY=your_key_here
+PORT=3000
+3) Start
+```bash
+node app.js
